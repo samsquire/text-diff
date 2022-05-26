@@ -225,11 +225,13 @@ def find_conflicts(left, right, diffs):
   print(diffs)
   
   for outer_index, outer in enumerate(diffs):
-    if outer in conflicts:
-      continue
+    
     conflicted = None
+    already_conflicted = False
     
     for inner_index, inner in enumerate(diffs):
+      if inner == outer:
+        continue
       outer_identifier = outer[0]
       inner_identifier = inner[0]
       outer_internal_index = outer[1]
@@ -252,18 +254,22 @@ def find_conflicts(left, right, diffs):
 
       
       #  and (outer_source_x <= inner_source_x or inner_source_y <= outer_source_y or outer_prev_source_x <= inner_prev_source_x or outer_prev_source_y <= inner_prev_source_y
-
-      if (inner_index > outer_index and inner_identifier != outer_identifier and inner_source_x == outer_source_x and inner_source_y == outer_source_y) and inner_value != outer_value and outer_internal_index == inner_internal_index:
+      already_conflicted =  inner in conflicts
+      if (inner_index >= outer_index and inner_identifier != outer_identifier and inner_source_x == outer_source_x and inner_source_y == outer_source_y) and inner_value != outer_value and outer_internal_index == inner_internal_index:
         
-        if outer_index != end and outer_index != 0 and outer_internal_index != left_end and outer_internal_index != 0 and inner_internal_index != right_end and inner_internal_index != 0:
-          print("conflict", inner_value, outer_value)
-          conflicted = (outer_identifier, outer_internal_index, "conflict", inner_value, outer_value, outer_source_x, outer_source_y, outer_prev_source_x, outer_prev_source_y)
-          break
+        if inner_value != "\n" and outer_value != "\n":
+          
+            print("conflict", inner_value, outer_value)
+            conflicted = (outer_identifier, outer_internal_index, "conflict", "", outer_value, outer_source_x, outer_source_y, outer_prev_source_x, outer_prev_source_y)
+            break
+            
           
           
-    if not conflicted:
+          
+    if not conflicted and not already_conflicted:
       rewritten.append(outer)
-    else:
+    elif conflicted:
+      conflicts.append(inner)
       conflicts.append(outer)
       rewritten.append(conflicted)
   return rewritten
