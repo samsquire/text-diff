@@ -13,7 +13,27 @@ document_right1 = Document(right1, S)
 document_right2 = Document(right2, document_right1)
 
 merged = diff3(document_left2, document_right2)
-print("merged", merged.text)
+if merged:
+  print("merged")
+  for item in merged:
+    print(item.text)
+
+conflict1 = """
+1. cheese
+"""
+
+conflict2 = """
+1. chocolate
+"""
+
+a = Document(conflict1, S)
+b = Document(conflict2, S)
+
+conflicted = diff3(a, b)
+if conflicted:
+  for item in conflicted:
+    print("conflict")
+    print(item.text)
 ```
 
 Apply a diff and apply it to the source document.
