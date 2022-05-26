@@ -9,12 +9,14 @@ root_text = """
 """
 
 left1 = """
+Recipe
 1. wine
 2. celery
 3. tomatoes
 """
 
 left2 = """
+Recipe
 1. wine
 2. celery
 3. tomatoes
@@ -29,17 +31,20 @@ original = """
 
 right1 = """
 1. wine
-2. salmon
-3. garlic
+2. celery
+
+Method
+Mix the ingredients together
 """
 
 right2 = """
-1. celery
-2. salmon
-3. garlic
-4. onions
-5. tomatoes
-6. wine
+1. wine
+2. celery
+
+Method
+Mix the ingredients together
+Put in oven
+
 """
 
 
@@ -132,18 +137,17 @@ def diff(left, right):
     a_line, b_line = left[prev_x], right[prev_y]
 
     if x == prev_x:
-      diff.insert(0, ("insert", None, b_line))
+      diff.insert(0, ("insert", None, b_line, x, y, prev_x, prev_y))
     elif y == prev_y:
-      diff.insert(0, ("delete", a_line, None))
+      diff.insert(0, ("delete", a_line, None, x, y, prev_x, prev_y))
     else:
-      diff.insert(0, ("same", a_line, b_line))
+      diff.insert(0, ("same", a_line, b_line, x, y, prev_x, prev_y))
     
   
 
     
     
-    for difference in diff:
-      print("difference", difference)
+    
     
   return diff
 
@@ -174,7 +178,7 @@ def label_and_number(identifier, diffs):
   
   for index, diff in enumerate(diffs):
     
-    updated_diffs.append((identifier, index, diff[0], diff[1], diff[2]))
+    updated_diffs.append((identifier, index, diff[0], diff[1], diff[2], diff[3], diff[4], diff[5], diff[6]))
   return updated_diffs
 
 def diff_sorter(left, right):
@@ -206,7 +210,7 @@ def diff_sorter(left, right):
 def delabel(diffs):
   delabelled = []
   for diff in diffs:
-    delabelled.append((diff[2], diff[3], diff[4]))
+    delabelled.append((diff[2], diff[3], diff[4], diff[5], diff[6], diff[7], diff[8]))
   return delabelled
 
 def remove_duplicates(diffs):
@@ -224,7 +228,17 @@ def remove_duplicates(diffs):
       outer_value = outer[4]
       inner_value = inner[4]
 
-      if (inner_index < outer_index and inner_internal_index < outer_internal_index and inner_value == outer_value and inner_type == outer_type):
+      outer_source_x = outer[5]
+      inner_source_x = inner[5]
+      outer_source_y = outer[6]
+      inner_source_y = inner[6]
+
+      outer_prev_source_x = outer[7]
+      outer_prev_source_y = outer[8]
+      inner_prev_source_x = inner[7]
+      inner_prev_source_y = inner[8]
+
+      if (inner_index < outer_index and inner_value == outer_value and inner_type == outer_type and outer_source_x <= inner_source_x and inner_source_y <= outer_source_y and outer_prev_source_x <= inner_prev_source_x and outer_prev_source_y <= inner_prev_source_y):
         valid = False
         break
         
