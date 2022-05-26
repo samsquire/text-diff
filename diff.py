@@ -133,15 +133,16 @@ def diff(left, right):
       continue
     if prev_x < 0 or prev_y < 0:
       continue
-    
-    a_line, b_line = left[prev_x], right[prev_y]
-
-    if x == prev_x:
-      diff.insert(0, ("insert", None, b_line, x, y, prev_x, prev_y))
-    elif y == prev_y:
-      diff.insert(0, ("delete", a_line, None, x, y, prev_x, prev_y))
     else:
-      diff.insert(0, ("same", a_line, b_line, x, y, prev_x, prev_y))
+    
+      a_line, b_line = left[prev_x], right[prev_y]
+  
+      if x == prev_x:
+        diff.insert(0, ("insert", None, b_line, x, y, prev_x, prev_y))
+      elif y == prev_y:
+        diff.insert(0, ("delete", a_line, None, x, y, prev_x, prev_y))
+      else:
+        diff.insert(0, ("same", a_line, b_line, x, y, prev_x, prev_y))
     
   
 
@@ -159,6 +160,8 @@ def apply_diffs(original, diff):
       merged += patch[2]
     if patch[0] == "insert":
       merged += patch[2]
+    if patch[0] == "conflict":
+      merged += "<<" + patch[1] + "|" + (patch[2] if patch[2] != None else "-") + ">>"
   return merged
 
 def diff_and_apply(original, a):
@@ -213,6 +216,58 @@ def delabel(diffs):
     delabelled.append((diff[2], diff[3], diff[4], diff[5], diff[6], diff[7], diff[8]))
   return delabelled
 
+def find_conflicts(left, right, diffs):
+  rewritten = []
+  conflicts = []
+  end = len(diffs) - 1
+  left_end = len(left) - 1
+  right_end = len(right) - 1
+  print(diffs)
+  
+  for outer_index, outer in enumerate(diffs):
+    if outer in conflicts:
+      continue
+    conflicted = None
+    
+    for inner_index, inner in enumerate(diffs):
+      outer_identifier = outer[0]
+      inner_identifier = inner[0]
+      outer_internal_index = outer[1]
+      inner_internal_index = inner[1]
+      outer_type = outer[2]
+      inner_type = inner[2]
+
+      outer_value = outer[4]
+      inner_value = inner[4]
+
+      outer_source_x = outer[5]
+      inner_source_x = inner[5]
+      outer_source_y = outer[6]
+      inner_source_y = inner[6]
+
+      outer_prev_source_x = outer[7]
+      inner_prev_source_x = inner[7]
+      outer_prev_source_y = outer[8]
+      inner_prev_source_y = inner[8]
+
+      
+      #  and (outer_source_x <= inner_source_x or inner_source_y <= outer_source_y or outer_prev_source_x <= inner_prev_source_x or outer_prev_source_y <= inner_prev_source_y
+
+      if (inner_index > outer_index and inner_identifier != outer_identifier and inner_source_x == outer_source_x and inner_source_y == outer_source_y) and inner_value != outer_value and outer_internal_index == inner_internal_index:
+        
+        if outer_index != end and outer_index != 0 and outer_internal_index != left_end and outer_internal_index != 0 and inner_internal_index != right_end and inner_internal_index != 0:
+          print("conflict", inner_value, outer_value)
+          conflicted = (outer_identifier, outer_internal_index, "conflict", inner_value, outer_value, outer_source_x, outer_source_y, outer_prev_source_x, outer_prev_source_y)
+          break
+          
+          
+    if not conflicted:
+      rewritten.append(outer)
+    else:
+      conflicts.append(outer)
+      rewritten.append(conflicted)
+  return rewritten
+
 def remove_duplicates(diffs):
   deduplicated_diffs = []
   for outer_index, outer in enumerate(diffs):
@@ -238,7 +293,7 @@ def remove_duplicates(diffs):
       inner_prev_source_x = inner[7]
       inner_prev_source_y = inner[8]
 
-      if (inner_index < outer_index and inner_value == outer_value and inner_type == outer_type and outer_source_x <= inner_source_x and inner_source_y <= outer_source_y and outer_prev_source_x <= inner_prev_source_x and outer_prev_source_y <= inner_prev_source_y):
+      if (inner_index < outer_index and inner_value == outer_value and inner_type == outer_type and outer_source_x == inner_source_x and inner_source_y == outer_source_y and outer_prev_source_x == inner_prev_source_x and outer_prev_source_y == inner_prev_source_y):
         valid = False
         break
         
@@ -247,7 +302,11 @@ def remove_duplicates(diffs):
     if valid:
       deduplicated_diffs.append(outer)
   return deduplicated_diffs
-      
+
+def has_conflicts(diff):
+  if diff[2] == "conflict":
+    return True
+  return False
 
 def merge_diffs(original, a, b):
   print(original.text)
@@ -257,13 +316,19 @@ def merge_diffs(original, a, b):
   diffs = diffs_a + diffs_b
   
   diffs.sort(key=cmp_to_key(diff_sorter))
+  diffs = find_conflicts(diffs_a, diffs_b, diffs)
   diffs = remove_duplicates(diffs)
+
+  
+  conflicts = list(filter(has_conflicts, diffs))
+  print(conflicts)
+  
   print("diffs", diffs)
 
   merged_left = apply_diffs(original.text, delabel(diffs))
   
   
-  return Document(merged_left, None)
+  return Document(merged_left, None, len(conflicts) > 0)
   
 
 def rindex(items, search):
@@ -306,27 +371,38 @@ def diff3(a, b):
   right_sequence = versions_from(S, b_history)
   last_left = S
   last_right = S
+  valid = True
   for left, right in zip_longest(left_sequence, right_sequence):
+    
     if left:
       
       last_left = merge_diffs(last_left, left.text, right.text)
+
+      if last_left.conflicts:
+        valid = False
     if right:
       
       last_right = merge_diffs(last_right, left.text, right.text)
+      if last_right.conflicts:
+        valid = False
 
+    if not valid:
+      break
     
-
+  if (last_left.conflicts or last_right.conflicts):
+    return last_left, last_right
     
-  
   merged = merge_diffs(last_left, last_left.text, last_right.text)
+  
 
   
-  return merged
+  return (merged,)
 
 class Document():
-  def __init__(self, text, previous):
+  def __init__(self, text, previous, conflicts=False):
     self.text = text
     self.previous = previous
+    self.conflicts = conflicts
 
 print(diff_and_apply(original, left2))
 
@@ -341,4 +417,24 @@ document_right1 = Document(right1, S)
 document_right2 = Document(right2, document_right1)
 
 merged = diff3(document_left2, document_right2)
-print("merged", merged.text)
+if merged:
+  print("merged")
+  for item in merged:
+    print(item.text)
+
+conflict1 = """
+1. cheese
+"""
+
+conflict2 = """
+1. chocolate
+"""
+
+a = Document(conflict1, S)
+b = Document(conflict2, S)
+
+conflicted = diff3(a, b)
+if conflicted:
+  for item in conflicted:
+    print("conflict")
+    print(item.text)
