@@ -115,49 +115,47 @@ def backtrack(n, m, max_size, trace):
 from itertools import zip_longest
 
 def diff(left, right):
-  diffs = []
-  for l, r in zip_longest(left, right, fillvalue=""):
-    diff = []
-    differences = backtrack(*diffstring(l, r))
+  
+  
+  diff = []
+  differences = backtrack(*diffstring(left, right))
 
-    for prev_x, prev_y, x, y in differences:
-      
-      if prev_x >= len(l):
-        break
-      if prev_y >= len(r):
-        break
-      if prev_x < 0 or prev_y < 0:
-        break
-      print(prev_x, prev_y, len(left), len(right))
-      a_line, b_line = l[prev_x], r[prev_y]
-
-      if x == prev_x:
-        diff.insert(0, ("insert", None, b_line))
-      elif y == prev_y:
-        diff.insert(0, ("delete", a_line, None))
-      else:
-        diff.insert(0, ("same", a_line, b_line))
-      
+  for prev_x, prev_y, x, y in differences:
     
+    if prev_x >= len(left):
+      continue
+    if prev_y >= len(right):
+      continue
+    if prev_x < 0 or prev_y < 0:
+      continue
+    
+    a_line, b_line = left[prev_x], right[prev_y]
+
+    if x == prev_x:
+      diff.insert(0, ("insert", None, b_line))
+    elif y == prev_y:
+      diff.insert(0, ("delete", a_line, None))
+    else:
+      diff.insert(0, ("same", a_line, b_line))
+    
+  
 
     
     
     for difference in diff:
       print("difference", difference)
-    if diff:
-      diffs.append(diff)
-  return diffs
+    
+  return diff
 
-def apply_diffs(original, diffs):
-  for source, diff in zip_longest(original, diffs):
-    merged = ""
-    if diff:
-      for patch in diff:
-        if patch[0] == "same":
-          merged += patch[2]
-        if patch[0] == "insert":
-          merged += patch[2]
-      yield merged
+def apply_diffs(original, diff):
+  merged = ""
+  
+  for patch in diff:
+    if patch[0] == "same":
+      merged += patch[2]
+    if patch[0] == "insert":
+      merged += patch[2]
+  return merged
 
 def diff_and_apply(original, a):
   original_split = original
@@ -166,17 +164,17 @@ def diff_and_apply(original, a):
   diffs = diff(original_split, a_split)
   print(diffs)
 
-  merged_left = list(apply_diffs(original_split, diffs))
+  merged_left = apply_diffs(original_split, diffs)
   
-  return Document(merged_left, original)
+  return Document(merged_left, None)
 
 def label_and_number(identifier, diffs):
   updated_diffs = []
   
-  for diffset in diffs:
-    for index, diff in enumerate(diffset):
-      print("diff", diff)
-      updated_diffs.append((identifier, index, diff[0], diff[1], diff[2]))
+  
+  for index, diff in enumerate(diffs):
+    
+    updated_diffs.append((identifier, index, diff[0], diff[1], diff[2]))
   return updated_diffs
 
 def diff_sorter(left, right):
@@ -199,6 +197,10 @@ def diff_sorter(left, right):
     return 1
   if right_type == "delete":
     return -1
+  if left_index > right_index:
+    return -1
+  if right_index > left_index:
+    return 1
   return 0
 
 def delabel(diffs):
@@ -207,19 +209,47 @@ def delabel(diffs):
     delabelled.append((diff[2], diff[3], diff[4]))
   return delabelled
 
+def remove_duplicates(diffs):
+  deduplicated_diffs = []
+  for outer_index, outer in enumerate(diffs):
+    valid = True
+    for inner_index, inner in enumerate(diffs):
+      outer_identifier = outer[0]
+      inner_identifier = inner[0]
+      outer_internal_index = outer[1]
+      inner_internal_index = inner[1]
+      outer_type = outer[2]
+      inner_type = inner[2]
+
+      outer_value = outer[4]
+      inner_value = inner[4]
+
+      if (inner_index < outer_index and inner_internal_index < outer_internal_index and inner_value == outer_value and inner_type == outer_type):
+        valid = False
+        break
+        
+        
+      
+    if valid:
+      deduplicated_diffs.append(outer)
+  return deduplicated_diffs
+      
+
 def merge_diffs(original, a, b):
+  print(original.text)
   diffs_a = label_and_number(0, diff(original.text, a))
   diffs_b = label_and_number(1, diff(original.text, b))
   
   diffs = diffs_a + diffs_b
-  print(diffs)
+  
   diffs.sort(key=cmp_to_key(diff_sorter))
-
+  diffs = remove_duplicates(diffs)
   print("diffs", diffs)
 
-  merged_left = list(apply_diffs(original.text, delabel(diffs)))
+  merged_left = apply_diffs(original.text, delabel(diffs))
   
-  return Document(merged_left, original)
+  
+  return Document(merged_left, None)
   
 
 def rindex(items, search):
