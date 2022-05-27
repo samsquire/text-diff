@@ -1,6 +1,7 @@
-# based on Ruby code
+# Myers algorithm based on Ruby code on
 # from https://blog.jcoglan.com/2017/02/17/the-myers-diff-algorithm-part-3/
 # i am still trying to understand this algorithm
+# I've implemented the diff3 algorithm with it which handles arbitrary text merges.
 from pprint import pprint
 from functools import cmp_to_key
 
@@ -156,12 +157,17 @@ def apply_diffs(original, diff):
   merged = ""
   
   for patch in diff:
-    if patch[0] == "same":
-      merged += patch[2]
-    if patch[0] == "insert":
-      merged += patch[2]
-    if patch[0] == "conflict":
-      merged += "<<" + patch[1] + "|" + (patch[2] if patch[2] != None else "-") + ">>"
+    if patch[2] == "same":
+      merged += patch[4]
+    if patch[2] == "insert":
+      merged += patch[4]
+    if patch[2] == "conflict":
+      posttag = "\u001b[39m"
+      if patch[0] == 1:
+        pretag = "\u001b[31m"
+      if patch[0] == 0:
+        pretag = "\u001b[32m"
+      merged += pretag + (patch[4] if patch[4] != None else "-") + posttag
   return merged
 
 def diff_and_apply(original, a):
@@ -222,29 +228,67 @@ def find_conflicts(left, right, diffs):
   end = len(diffs) - 1
   left_end = len(left) - 1
   right_end = len(right) - 1
-  pprint(diffs)
+  cursors = {
+    "0": 0,
+    "1": 0
+  }
   
   for outer_index, outer in enumerate(diffs):
     
-    max_x = 0
-    max_y = 0
+    
+    innercursor = 0
+    outer_identifier = outer[0]
 
+    
+    outer_internal_index = outer[1]
+  
+    outer_type = outer[2]
+    
+    current_identifier = outer[0]
+    
+    outer_source_x = outer[5]
+    
+    outer_source_y = outer[6]
+    
+    outer_prev_source_x = outer[7]
+    
+    outer_prev_source_y = outer[8]
+    
+    
+    
+    if outer_type == "insert":
+      cursors[str(current_identifier)] = cursors[str(current_identifier)] + 1
+        
+      
+    
     for inner_index, inner in enumerate(diffs):
-      if inner == outer:
-        continue
-      outer_identifier = outer[0]
-      inner_identifier = inner[0]
-      outer_source_x = outer[5]
-      inner_source_x = inner[5]
-      outer_source_y = outer[6]
-      inner_source_y = inner[6]
-      if inner_identifier != outer_identifier:
-        max_x = max(max_x, inner_source_x)
-        max_y = max(max_y, inner_source_y)
+     
+        inner_identifier = inner[0]
+        inner_internal_index = inner[1]
+        inner_type = inner[2]
+        inner_value = inner[4]
+        inner_source_x = inner[5]
+        inner_source_y = inner[6]
+        inner_prev_source_x = inner[7]
+        inner_prev_source_y = inner[8]
+  
+        
+        
+        
+        if inner_identifier != outer_identifier:
+          
+          if inner_type == "insert":
+            innercursor = innercursor + 1
+
+          
+
+    
+        
     
     already_conflicted = False
     conflicted = None
     for inner_index, inner in enumerate(diffs):
+      
       
       if inner == outer:
         continue
@@ -271,17 +315,17 @@ def find_conflicts(left, right, diffs):
       
       #  and (outer_source_x <= inner_source_x or inner_source_y <= outer_source_y or outer_prev_source_x <= inner_prev_source_x or outer_prev_source_y <= inner_prev_source_y
       
-      
-      past_end = (outer_source_x > max_x and outer_source_y > max_y) and inner_type != "delete" and outer_type != "delete"
+      # print(cursor, innercursor)
+      past_end = (cursors[str(outer_identifier)] >= cursors[str(((inner_identifier + 1)% 2))]) and outer_type != "delete" and inner_type != "delete"
       already_conflicted =  (inner in conflicts) and outer_type != "delete"
 
       
       
-      if past_end or (inner_identifier != outer_identifier and (inner_source_x == outer_source_x and inner_source_y == outer_source_y and outer_prev_source_x == inner_prev_source_x and outer_prev_source_y == inner_prev_source_y)) and inner_value != outer_value:
+      if past_end and already_conflicted or (inner_identifier != outer_identifier and (inner_source_x == outer_source_x and inner_source_y == outer_source_y and outer_prev_source_x == inner_prev_source_x and outer_prev_source_y == inner_prev_source_y)) and inner_value != outer_value:
         
         if inner_value != "\n" and outer_value != "\n":
           
-            print("conflict", inner_value, outer_value)
+            # print("conflict", inner_value, outer_value)
             conflicted = (outer_identifier, outer_internal_index, "conflict", "", outer_value, outer_source_x, outer_source_y, outer_prev_source_x, outer_prev_source_y)
             break
             
@@ -337,7 +381,7 @@ def has_conflicts(diff):
   return False
 
 def merge_diffs(original, a, b):
-  print(original.text)
+  # print(original.text)
   diffs_a = label_and_number(0, diff(original.text, a))
   diffs_b = label_and_number(1, diff(original.text, b))
   
@@ -349,12 +393,12 @@ def merge_diffs(original, a, b):
 
   
   conflicts = list(filter(has_conflicts, diffs))
-  print(conflicts)
+  # print(conflicts)
   
   
 
-  merged_left = apply_diffs(original.text, delabel(diffs))
-  
+  merged_left = apply_diffs(original.text, diffs)
+  print(merged_left)
   
   return Document(merged_left, None, len(conflicts) > 0)
   
@@ -390,11 +434,11 @@ def versions_from(source, history):
 
 def diff3(a, b):
   a_history = get_history(a)
-  print(a_history)
+  
   b_history = get_history(b)
-  print(b_history)
+  
   S = common_ancestor(a_history, b_history)
-  print("common ancestor", S)
+  
   left_sequence = versions_from(S, a_history)
   right_sequence = versions_from(S, b_history)
   last_left = S
