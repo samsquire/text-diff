@@ -75,7 +75,7 @@ def diffstring(left, right):
     trace.append(list(costs))
     for k in [i for i in range(-d, max_size, 2)]:
       if k == -d or (k != d and costs[k - 1] < costs[k + 1] > costs[k + 1]): # insert if its too costly to move diagonally
-        x = costs[k + 1] # insert
+        x = costs[k + 1] + 1 # insert
       else:
         x = costs[k - 1] + 1
       y = x - k
@@ -144,7 +144,7 @@ def diff(left, right):
       if x == prev_x:
         diff.insert(0, ("insert", None, b_line, x, y, prev_x, prev_y))
       elif y == prev_y:
-        diff.insert(0, ("delete", a_line, None, x, y, prev_x, prev_y))
+        pass # diff.insert(0, ("delete", a_line, None, x, y, prev_x, prev_y))
       else:
         
         diff.insert(0, ("same", a_line, b_line, x, y, prev_x, prev_y))
@@ -202,6 +202,23 @@ def diff_sorter(left, right):
   left_type = left[2]
   right_type = right[2]
 
+  outer_source_x = left[5]
+    
+  outer_source_y = left[6]
+    
+  outer_prev_source_x = left[7]
+    
+  outer_prev_source_y = left[8]
+
+  inner_source_x = right[5]
+    
+  inner_source_y = right[6]
+    
+  inner_prev_source_x = right[7]
+    
+  inner_prev_source_y = right[8]
+
+  
   if left_identifier > right_identifier:
     return 1
   if right_identifier < left_identifier:
@@ -214,10 +231,7 @@ def diff_sorter(left, right):
     return 1
   if right_type == "delete":
     return -1
-  if left_index > right_index:
-    return -1
-  if right_index > left_index:
-    return 1
+
   return 0
 
 def delabel(diffs):
@@ -383,6 +397,161 @@ def has_conflicts(diff):
   if diff[2] == "conflict":
     return True
   return False
+from itertools import combinations
+class DiffRange:
+  def __init__(self, identifier, type):
+    self.type = type
+    self.identifier = identifier
+    self.diffs = []
+    self.divergences = []
+    self.next = None
+
+  def add_diff(self, diff):
+    if diff[2] == "same":
+      self.diffs.append((-1, diff[1], diff[2], diff[3], diff[4], diff[5], diff[6], diff[7], diff[8]))
+    else:
+      self.diffs.append(diff)
+  
+  def add_child(self, divergence):
+    self.divergences.append(divergence)
+
+  def add_join(self, join):
+    for item in self.divergences:
+      item.next = join
+
+  def equal(left, right):
+    left_string = ""
+    for item in left.diffs:
+      
+        left_string += item[4]
+    right_string = ""
+    for item in right.diffs:
+      
+        right_string += item[4]
+    return left_string == right_string
+
+  def remove_equal(self):
+    for pair in combinations(self.divergences, 2):
+      if self.equal(pair[0], pair[1]):
+        self.divergences.remove(pair[1])
+  
+  def walk(self, path=""):
+    print(path + self.type)
+    
+    for item in self.divergences:
+      for diff in item.diffs:
+        print(path + str(diff))
+      
+    if self.next:
+      self.next.walk(path)
+
+def apply_alignments(alignment):
+  current = alignment
+  conflict = False
+  merged = ""
+  while current != None:
+    if len(current.divergences) > 0:
+      conflict = True
+    for divergence in current.divergences:
+      for patch in divergence.diffs:
+        posttag = "\u001b[39m"
+        if patch[0] == 1:
+          pretag = "\u001b[31m"
+        if patch[0] == 0:
+          pretag = "\u001b[32m"
+        if patch[0] == -1:
+          pretag = ""
+        merged += pretag + (patch[4] if patch[4] != None else "") + posttag
+
+    current = current.next
+  
+  return conflict, merged
+
+class Coordinate:
+  def __init__(x, y):
+    self.x = x
+    self.y = y
+    self.diffranges = []
+    self.next = None
+
+  def add_diff(diff):
+    self.diffs.append(diff)
+
+
+def create_coordinate_tree(alignments):
+  tree = []
+  current = alignments
+  while current != None:
+    tree.append(current)
+    current = current.next
+  tree.sort(coordinate_sorter)
+    
+    
+
+def create_alignment(diffs):
+  previous = diffs[0]
+  
+  previous_identifier = previous[0]
+  previous_type = previous[2]
+
+  previous_source_x = previous[5]
+  
+  
+  previous_root = DiffRange(previous_identifier, previous_type)
+  root = previous_root
+  current_span = DiffRange(previous_identifier, previous_type)
+  current_span.add_diff(previous)
+  previous_root.add_child(current_span)
+  for outer in diffs[1:]:
+    outer_identifier = outer[0]
+    
+    outer_internal_index = outer[1]
+    
+    outer_type = outer[2]
+    
+
+    outer_value = outer[4]
+    
+
+    outer_source_x = outer[5]
+    
+    outer_source_y = outer[6]
+    
+
+    outer_prev_source_x = outer[7]
+    outer_prev_source_y = outer[8]
+
+    matches_type = previous_type == outer_type
+    matches_identifier = outer_identifier == previous_identifier
+
+    
+      
+    
+    if not matches_identifier or not matches_type:
+      
+      new_root = DiffRange(outer_identifier, outer_type)
+      
+      new_span = DiffRange(outer_identifier, outer_type)
+      previous_root.next = new_root
+      
+      new_root.add_child(new_span)
+      new_span.add_diff(outer)
+      current_span = new_span
+      previous_root.add_join(new_root)
+      
+      previous_root = new_root
+    elif matches_identifier:
+      current_span.add_diff(outer)
+    
+    previous_identifier = outer_identifier
+    previous_type = outer_type
+    previous_source_x = outer_source_x
+  
+  root.remove_equal()
+  
+  return root
+    
+    
 
 def merge_diffs(original, a, b):
   print(a)
@@ -394,17 +563,22 @@ def merge_diffs(original, a, b):
   diffs = diffs_a + diffs_b
   
   diffs.sort(key=cmp_to_key(diff_sorter))
+
+  
   diffs = find_conflicts(diffs_a, diffs_b, diffs)
   diffs = remove_duplicates(diffs)
 
-  
+  # alignment = create_alignment(diffs)
+  # print(alignment.walk())
+  merged_left = apply_diffs(original, diffs)
+  # merged = apply_alignments(alignment)
+  # print(merged[1])
   conflicts = list(filter(has_conflicts, diffs))
   # print(conflicts)
   print("diffs")
-  pprint(diffs)
+  # pprint(diffs)
 
-  merged_left = apply_diffs(original.text, diffs)
-  print(merged_left)
+  
   
   return Document(merged_left, None, len(conflicts) > 0)
   
@@ -519,4 +693,3 @@ if conflicted:
 
 # t1 = diff_and_apply(original, left1)
 # print(t1.text)
-
