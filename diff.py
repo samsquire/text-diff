@@ -69,13 +69,13 @@ def diffstring(left, right):
   
   costs[1] = 0
   x = 0
-  y = -1
+  y = 0
   
   for d in range(0, max_size):
     trace.append(list(costs))
     for k in [i for i in range(-d, max_size, 2)]:
       if k == -d or (k != d and costs[k - 1] < costs[k + 1] > costs[k + 1]): # insert if its too costly to move diagonally
-        x = costs[k + 1] + 1 # insert
+        x = costs[k + 1] # insert
       else:
         x = costs[k - 1] + 1
       y = x - k
@@ -554,8 +554,8 @@ def create_alignment(diffs):
     
 
 def merge_diffs(original, a, b):
-  print(a)
-  print(b)
+  print("source document", a)
+  print("target document", b)
   # print(original.text)
   diffs_a = label_and_number(0, diff(original.text, a))
   diffs_b = label_and_number(1, diff(original.text, b))
@@ -632,17 +632,17 @@ def diff3(a, b):
 
       if last_left.conflicts:
         valid = False
+        
     if right:
       
       last_right = merge_diffs(last_right, left.text, right.text)
       if last_right.conflicts:
         valid = False
+        
 
-    if not valid:
-      break
     
-  if (last_left.conflicts or last_right.conflicts):
-    return last_left, last_right
+    
+  
     
   merged = merge_diffs(last_left, last_left.text, last_right.text)
   
@@ -691,5 +691,5 @@ if conflicted:
     print("conflict")
     print(item.text)
 
-# t1 = diff_and_apply(original, left1)
-# print(t1.text)
+t1 = diff_and_apply(original, left1)
+print(t1.text)
