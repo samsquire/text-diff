@@ -75,10 +75,11 @@ def diffstring(left, right):
     trace.append(list(costs))
     for k in [i for i in range(-d, max_size, 2)]:
       if k == -d or (k != d and costs[k - 1] < costs[k + 1] > costs[k + 1]): # insert if its too costly to move diagonally
-        x = costs[k + 1] + 1 # insert
+        x = costs[k + 1] # insert
       else:
         x = costs[k - 1] + 1
       y = x - k
+      
       if y < 0:
         y = 0
       
@@ -86,10 +87,10 @@ def diffstring(left, right):
         
         x, y = x + 1, y + 1
       
-      
+      costs[k] = x
       if x >= n and y >= m:
         return n, m, max_size, trace
-      costs[k] = x
+      
   return n, m, max_size, trace
 
 def backtrack(n, m, max_size, trace):
@@ -110,7 +111,7 @@ def backtrack(n, m, max_size, trace):
       yield x - 1, y - 1, x, y
       x, y = x - 1, y - 1
 
-    if d > 0:
+    if d >= 0:
       
       yield prev_x, prev_y, x, y 
       
@@ -132,7 +133,9 @@ def diff(left, right):
       continue
     if prev_y >= len(right):
       continue
-    if prev_x < 0 or prev_y < 0:
+    if prev_x < 0:
+      continue
+    if prev_y < 0:
       continue
     else:
     
@@ -143,6 +146,7 @@ def diff(left, right):
       elif y == prev_y:
         diff.insert(0, ("delete", a_line, None, x, y, prev_x, prev_y))
       else:
+        
         diff.insert(0, ("same", a_line, b_line, x, y, prev_x, prev_y))
     
   
@@ -174,8 +178,8 @@ def diff_and_apply(original, a):
   original_split = original
   a_split = a
   
-  diffs = diff(original_split, a_split)
-  print(diffs)
+  diffs = label_and_number(0, diff(original_split, a_split))
+  pprint(diffs)
 
   merged_left = apply_diffs(original_split, diffs)
   
@@ -321,12 +325,12 @@ def find_conflicts(left, right, diffs):
 
       
       
-      if past_end and already_conflicted or (inner_identifier != outer_identifier and (inner_source_x == outer_source_x and inner_source_y == outer_source_y and outer_prev_source_x == inner_prev_source_x and outer_prev_source_y == inner_prev_source_y)) and inner_value != outer_value:
+      if past_end and already_conflicted or (inner_identifier != outer_identifier and (inner_source_x == outer_source_x and inner_source_y == outer_source_y or (outer_prev_source_x == inner_prev_source_x and outer_prev_source_y == inner_prev_source_y))) and inner_value != outer_value and outer_type != "delete":
         
         if inner_value != "\n" and outer_value != "\n":
           
             # print("conflict", inner_value, outer_value)
-            conflicted = (outer_identifier, outer_internal_index, "conflict", "", outer_value, outer_source_x, outer_source_y, outer_prev_source_x, outer_prev_source_y)
+            conflicted = ((outer_identifier + 1) % 2, outer_internal_index, "conflict", "", outer_value, outer_source_x, outer_source_y, outer_prev_source_x, outer_prev_source_y)
             break
             
           
@@ -365,7 +369,7 @@ def remove_duplicates(diffs):
       inner_prev_source_x = inner[7]
       inner_prev_source_y = inner[8]
 
-      if (inner_index < outer_index and inner_value == outer_value and inner_type == outer_type and outer_source_x == inner_source_x and inner_source_y == outer_source_y and outer_prev_source_x == inner_prev_source_x and outer_prev_source_y == inner_prev_source_y):
+      if (inner_index > outer_index and inner_value == outer_value and inner_type == outer_type and (outer_source_x == inner_source_x and inner_source_y == outer_source_y) and (outer_prev_source_x == inner_prev_source_x and outer_prev_source_y == inner_prev_source_y)):
         valid = False
         break
         
@@ -381,6 +385,8 @@ def has_conflicts(diff):
   return False
 
 def merge_diffs(original, a, b):
+  print(a)
+  print(b)
   # print(original.text)
   diffs_a = label_and_number(0, diff(original.text, a))
   diffs_b = label_and_number(1, diff(original.text, b))
@@ -394,8 +400,8 @@ def merge_diffs(original, a, b):
   
   conflicts = list(filter(has_conflicts, diffs))
   # print(conflicts)
-  
-  
+  print("diffs")
+  pprint(diffs)
 
   merged_left = apply_diffs(original.text, diffs)
   print(merged_left)
@@ -430,7 +436,7 @@ def get_history(document):
 
 def versions_from(source, history):
   start = history.index(source)
-  return history[start:]
+  return history[start  + 1:]
 
 def diff3(a, b):
   a_history = get_history(a)
@@ -510,3 +516,7 @@ if conflicted:
   for item in conflicted:
     print("conflict")
     print(item.text)
+
+# t1 = diff_and_apply(original, left1)
+# print(t1.text)
+
