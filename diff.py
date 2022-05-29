@@ -82,12 +82,14 @@ def diffstring(left, right):
       
       if y < 0:
         y = 0
+
+      costs[k] = x
       
       while x < n and y < m and left[x] == right[y]:
         
         x, y = x + 1, y + 1
       
-      costs[k] = x
+      
       if x >= n and y >= m:
         return n, m, max_size, trace
       
@@ -183,7 +185,7 @@ def diff_and_apply(original, a):
 
   merged_left = apply_diffs(original_split, diffs)
   
-  return Document(merged_left, None)
+  return Document(merged_left, None, display=merged_left)
 
 def label_and_number(identifier, diffs):
   updated_diffs = []
@@ -354,7 +356,7 @@ def find_conflicts(left, right, diffs):
       rewritten.append(outer)
     elif conflicted:
       conflicts.append(outer)
-      
+      conflicts.append(inner)
       rewritten.append(conflicted)
   return rewritten
 
@@ -398,6 +400,7 @@ def has_conflicts(diff):
     return True
   return False
 from itertools import combinations
+
 class DiffRange:
   def __init__(self, identifier, type):
     self.type = type
@@ -405,7 +408,22 @@ class DiffRange:
     self.diffs = []
     self.divergences = []
     self.next = None
+    self.conflicted = False
 
+  def create_coordinate(self):
+    min_x = 0
+    min_y = 0
+    max_x = 0
+    max_y = 0
+    for diffrange in self.divergences:
+      
+      for divergence in diffrange.diffs:
+        min_x = min(min_x, divergence[5])
+        min_y = min(min_y, divergence[6])
+        max_x = max(max_x, divergence[5])
+        max_y = max(max_y, divergence[6])
+    return Coordinate(min_x, min_y, max_x, max_y, diffrange)
+  
   def add_diff(self, diff):
     if diff[2] == "same":
       self.diffs.append((-1, diff[1], diff[2], diff[3], diff[4], diff[5], diff[6], diff[7], diff[8]))
@@ -448,45 +466,71 @@ class DiffRange:
 def apply_alignments(alignment):
   current = alignment
   conflict = False
-  merged = ""
+  display = ""
+  plain = ""
   while current != None:
     if len(current.divergences) > 0:
       conflict = True
     for divergence in current.divergences:
       for patch in divergence.diffs:
+        pretag = ""
         posttag = "\u001b[39m"
-        if patch[0] == 1:
-          pretag = "\u001b[31m"
-        if patch[0] == 0:
-          pretag = "\u001b[32m"
-        if patch[0] == -1:
-          pretag = ""
-        merged += pretag + (patch[4] if patch[4] != None else "") + posttag
+        
+        if divergence.conflicted:
+          
+          
+          if patch[0] == 1:
+            pretag = "\u001b[31m"
+          if patch[0] == 0:
+            pretag = "\u001b[32m"
+          if patch[0] == -1:
+            pretag = ""
+        display += pretag + (patch[4] if patch[4] != None else "") + posttag
+        plain += patch[4] if patch[4] != None else ""
 
     current = current.next
   
-  return conflict, merged
+  return (conflict, (display, plain))
 
 class Coordinate:
-  def __init__(x, y):
-    self.x = x
-    self.y = y
-    self.diffranges = []
-    self.next = None
+  def __init__(self, min_x, min_y, max_x, max_y, diffrange):
+    self.min_x = min_x
+    self.min_y = min_y
+    self.max_x = max_x
+    self.max_y = max_y
 
-  def add_diff(diff):
-    self.diffs.append(diff)
+    self.diffrange = diffrange
+    
 
+
+def mark_conflicting_coordinates(coordinates):
+  
+  for outer in coordinates:
+    for inner in coordinates:
+      if inner == outer:
+        continue
+      if inner.min_x >= outer.min_x and \
+        inner.max_x <= outer.max_x or \
+        inner.min_y >= outer.min_y and \
+        inner.max_y <= outer.max_y:
+          
+          
+          inner.diffrange.conflicted = True
+          outer.diffrange.conflicted = True
+          
+          
 
 def create_coordinate_tree(alignments):
   tree = []
   current = alignments
+  coordinates = []
   while current != None:
     tree.append(current)
+    coordinate = current.create_coordinate()
+    coordinates.append(coordinate)
     current = current.next
-  tree.sort(coordinate_sorter)
-    
-    
+  
+  mark_conflicting_coordinates(coordinates)
 
 def create_alignment(diffs):
   previous = diffs[0]
@@ -540,7 +584,7 @@ def create_alignment(diffs):
       previous_root.add_join(new_root)
       
       previous_root = new_root
-    elif matches_identifier:
+    else:
       current_span.add_diff(outer)
     
     previous_identifier = outer_identifier
@@ -565,22 +609,24 @@ def merge_diffs(original, a, b):
   diffs.sort(key=cmp_to_key(diff_sorter))
 
   
-  diffs = find_conflicts(diffs_a, diffs_b, diffs)
-  diffs = remove_duplicates(diffs)
-
-  # alignment = create_alignment(diffs)
+  # diffs = find_conflicts(diffs_a, diffs_b, diffs)
+  # diffs = remove_duplicates(diffs)
+  pprint(diffs)
+  alignment = create_alignment(diffs)
+  create_coordinate_tree(alignment)
   # print(alignment.walk())
-  merged_left = apply_diffs(original, diffs)
-  # merged = apply_alignments(alignment)
+  # merged_left = apply_diffs(original, diffs)
+  conflicts, merged = apply_alignments(alignment)
   # print(merged[1])
-  conflicts = list(filter(has_conflicts, diffs))
+  # conflicts = list(filter(has_conflicts, diffs))
   # print(conflicts)
+  
   print("diffs")
   # pprint(diffs)
 
+  print("display", merged[0])
   
-  
-  return Document(merged_left, None, len(conflicts) > 0)
+  return Document(text=merged[1], previous=None, conflicts=conflicts, display=merged[0])
   
 
 def rindex(items, search):
@@ -651,8 +697,9 @@ def diff3(a, b):
   return (merged,)
 
 class Document():
-  def __init__(self, text, previous, conflicts=False):
+  def __init__(self, text, previous, display="", conflicts=False):
     self.text = text
+    self.display = display
     self.previous = previous
     self.conflicts = conflicts
 
@@ -672,7 +719,7 @@ merged = diff3(document_left2, document_right2)
 if merged:
   print("merged")
   for item in merged:
-    print(item.text)
+    print(item.display)
 
 conflict1 = """
 1. cheese
@@ -689,7 +736,7 @@ conflicted = diff3(a, b)
 if conflicted:
   for item in conflicted:
     print("conflict")
-    print(item.text)
+    print(item.display)
 
 t1 = diff_and_apply(original, left1)
-print(t1.text)
+print(t1.display)
