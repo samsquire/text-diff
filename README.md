@@ -1,5 +1,5 @@
 # text-diff
-This is a python impelementation of three way merge that uses Myers algorithm.
+This is a python implementation of three way merge that uses Myers algorithm.
 
 ```
 common = Document(root_text, None)
